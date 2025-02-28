@@ -9,7 +9,7 @@ from database import Database
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'  # Вставь свой токен от BotFather
+TOKEN = '7398783215:AAGWkTSpNFqV-Jm0MHvwmkROceTUekPaFms'  # Вставь свой токен от BotFather
 APP_URL = 'https://trumpipampi.onrender.com/app'  # Обновится после деплоя
 
 flask_app = Flask(__name__)
