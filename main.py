@@ -1,5 +1,5 @@
 import telegram
-from telegram.ext import Application, CommandHandler, ContextTypes, JobQueue
+from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from flask import Flask, request, send_from_directory
 import threading
@@ -25,21 +25,21 @@ def serve_app():
     logger.info(f"App directory: {app_dir}, files: {os.listdir(app_dir)}")
     return send_from_directory(app_dir, 'index.html')
 
-@flask_app.route('/api/tap', methods=['POST'])
-def tap():
+@flask_app.route('/api/sync', methods=['POST'])
+def sync():
     chat_id = int(request.json['chat_id'])
-    logger.info(f"Received tap request for chat_id: {chat_id}")
-    balance, energy = db.tap(chat_id)
-    logger.info(f"Tap processed for {chat_id}: balance={balance}, energy={energy}")
-    return {'balance': balance, 'energy': energy}
+    data = request.json
+    logger.info(f"Sync request for chat_id: {chat_id}, data: {data}")
+    db.sync_user(chat_id, data['balance'], data['energy'], data['max_energy'], data['level'], data['multitap'])
+    return {'status': 'synced'}
 
 @flask_app.route('/api/stats', methods=['GET'])
 def get_stats():
     chat_id = int(request.args.get('chat_id'))
     logger.info(f"Received stats request for chat_id: {chat_id}")
-    balance, energy, max_energy, level, multitap = db.get_stats(chat_id)
-    logger.info(f"Stats returned for {chat_id}: balance={balance}, energy={energy}, max_energy={max_energy}, level={level}, multitap={multitap}")
-    return {'balance': balance, 'energy': energy, 'max_energy': max_energy, 'level': level, 'multitap': multitap}
+    stats = db.get_stats(chat_id)
+    logger.info(f"Stats returned for {chat_id}: {stats}")
+    return stats
 
 def run_flask():
     logger.info("Starting Flask server on 0.0.0.0:5000...")
@@ -62,7 +62,7 @@ def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     threading.Thread(target=run_flask, daemon=True).start()
-    time.sleep(10)  # Задержка 10 сек перед polling
+    time.sleep(10)  # Задержка перед polling
     while True:
         try:
             logger.info("Bot is polling...")
