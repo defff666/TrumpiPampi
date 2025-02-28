@@ -5,6 +5,7 @@ from flask import Flask, request, send_from_directory
 import threading
 import logging
 import time
+import os
 from database import Database
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -13,14 +14,16 @@ logger = logging.getLogger(__name__)
 TOKEN = '7899507312:AAE6UtB-ARAu7cKvPfpksQdSFjhXEchZ7EY'
 APP_URL = 'https://trumpipampi.onrender.com/app'
 
-flask_app = Flask(__name__)
+flask_app = Flask(__name__, static_folder='app')  # Явно указываем папку app
 db = Database()
 
 @flask_app.route('/app')
 def serve_app():
     chat_id = request.args.get('chat_id')
     logger.info(f"Serving app for chat_id: {chat_id}")
-    return send_from_directory('app', 'index.html')
+    app_dir = os.path.join(flask_app.root_path, 'app')  # Проверяем путь
+    logger.info(f"App directory: {app_dir}, files: {os.listdir(app_dir)}")
+    return send_from_directory(app_dir, 'index.html')
 
 @flask_app.route('/api/tap', methods=['POST'])
 def tap():
