@@ -10,7 +10,7 @@ from database import Database
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = '7398783215:AAGWkTSpNFqV-Jm0MHvwmkROceTUekPaFms'  # Твой токен
+TOKEN = '7899507312:AAE6UtB-ARAu7cKvPfpksQdSFjhXEchZ7EY'  # Твой токен
 APP_URL = 'https://trumpipampi.onrender.com/app'  # Твой URL на Render
 
 flask_app = Flask(__name__)
