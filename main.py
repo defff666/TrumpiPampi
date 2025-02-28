@@ -10,8 +10,8 @@ from database import Database
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = '7899507312:AAE6UtB-ARAu7cKvPfpksQdSFjhXEchZ7EY'  # Новый токен
-APP_URL = 'https://trumpipampi.onrender.com/app'  # Твой Render URL
+TOKEN = '7899507312:AAE6UtB-ARAu7cKvPfpksQdSFjhXEchZ7EY'
+APP_URL = 'https://trumpipampi.onrender.com/app'
 
 flask_app = Flask(__name__)
 db = Database()
@@ -40,7 +40,7 @@ def get_stats():
 
 def run_flask():
     logger.info("Starting Flask server on 0.0.0.0:5000...")
-    flask_app.run(host='0.0.0.0', port=5000)  # Render требует порт 5000
+    flask_app.run(host='0.0.0.0', port=5000)
 
 async def start(update: Update, context: ContextTypes):
     chat_id = update.message.chat_id
@@ -55,6 +55,7 @@ async def start(update: Update, context: ContextTypes):
     )
 
 def main():
+    logger.info("Initializing TrumpiPumpi bot...")
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     threading.Thread(target=run_flask, daemon=True).start()
