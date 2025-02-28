@@ -1,14 +1,20 @@
 const chatId = new URLSearchParams(window.location.search).get('chat_id');
 
-// Предотвращаем дублирование окон
-if (window.Telegram.WebApp.isExpanded) {
-    window.Telegram.WebApp.close();  // Закрываем старое окно, если оно уже открыто
+// Проверяем, запущено ли уже приложение ранее
+let isFirstLaunch = localStorage.getItem('trumpiPampiFirstLaunch') === null;
+if (!isFirstLaunch && window.Telegram.WebApp.isExpanded) {
+    console.log('Closing duplicate Mini App instance');
+    window.Telegram.WebApp.close();
+} else {
+    localStorage.setItem('trumpiPampiFirstLaunch', 'true');
+    console.log('First launch detected, keeping Mini App open');
 }
 
 async function updateStats() {
     try {
-        const response = await fetch(`/api/stats?chat_id=${chatId}`);
         console.log('Fetching stats for chat_id:', chatId);
+        const response = await fetch(`/api/stats?chat_id=${chatId}`);
+        if (!response.ok) throw new Error(`Stats request failed: ${response.status}`);
         const data = await response.json();
         console.log('Stats response:', data);
         document.getElementById('balance').innerText = `💰 ${data.balance} TRUMP`;
@@ -26,6 +32,7 @@ async function tap() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chat_id: chatId })
         });
+        if (!response.ok) throw new Error(`Tap request failed: ${response.status}`);
         const data = await response.json();
         console.log('Tap response:', data);
         document.getElementById('balance').innerText = `💰 ${data.balance} TRUMP`;
@@ -36,5 +43,6 @@ async function tap() {
 }
 
 window.Telegram.WebApp.ready();
+console.log('Mini App initialized');
 updateStats();
 setInterval(updateStats, 5000);
