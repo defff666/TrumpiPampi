@@ -1,3 +1,4 @@
+import telegram  # Добавили импорт
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from flask import Flask, request, send_from_directory
@@ -9,8 +10,8 @@ from database import Database
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = '7398783215:AAGWkTSpNFqV-Jm0MHvwmkROceTUekPaFms'  # Вставь свой токен от BotFather
-APP_URL = 'https://trumpipampi.onrender.com/app'  # Обновится после деплоя
+TOKEN = '7398783215:AAGWkTSpNFqV-Jm0MHvwmkROceTUekPaFms'  # Твой токен
+APP_URL = 'https://trumpipampi.onrender.com/app'  # Твой URL на Render
 
 flask_app = Flask(__name__)
 db = Database()
@@ -57,6 +58,9 @@ def main():
             app.run_polling()
         except telegram.error.NetworkError as e:
             logger.warning(f"Network error: {e}. Retrying in 5 sec...")
+            time.sleep(5)
+        except telegram.error.Conflict as e:
+            logger.error(f"Conflict error: {e}. Another instance is running. Retrying in 5 sec...")
             time.sleep(5)
         except Exception as e:
             logger.error(f"Bot crashed: {e}")
