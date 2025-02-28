@@ -1,5 +1,5 @@
 import telegram
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, JobQueue
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from flask import Flask, request, send_from_directory
 import threading
@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 TOKEN = '7899507312:AAE6UtB-ARAu7cKvPfpksQdSFjhXEchZ7EY'
 APP_URL = 'https://trumpipampi.onrender.com/app'
 
-flask_app = Flask(__name__, static_folder='app')  # Явно указываем папку app
+flask_app = Flask(__name__, static_folder='app')
 db = Database()
 
 @flask_app.route('/app')
 def serve_app():
     chat_id = request.args.get('chat_id')
     logger.info(f"Serving app for chat_id: {chat_id}")
-    app_dir = os.path.join(flask_app.root_path, 'app')  # Проверяем путь
+    app_dir = os.path.join(flask_app.root_path, 'app')
     logger.info(f"App directory: {app_dir}, files: {os.listdir(app_dir)}")
     return send_from_directory(app_dir, 'index.html')
 
@@ -37,9 +37,9 @@ def tap():
 def get_stats():
     chat_id = int(request.args.get('chat_id'))
     logger.info(f"Received stats request for chat_id: {chat_id}")
-    balance, energy, max_energy = db.get_stats(chat_id)
-    logger.info(f"Stats returned for {chat_id}: balance={balance}, energy={energy}, max_energy={max_energy}")
-    return {'balance': balance, 'energy': energy, 'max_energy': max_energy}
+    balance, energy, max_energy, level, multitap = db.get_stats(chat_id)
+    logger.info(f"Stats returned for {chat_id}: balance={balance}, energy={energy}, max_energy={max_energy}, level={level}, multitap={multitap}")
+    return {'balance': balance, 'energy': energy, 'max_energy': max_energy, 'level': level, 'multitap': multitap}
 
 def run_flask():
     logger.info("Starting Flask server on 0.0.0.0:5000...")
@@ -62,6 +62,7 @@ def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     threading.Thread(target=run_flask, daemon=True).start()
+    time.sleep(10)  # Задержка 10 сек перед polling
     while True:
         try:
             logger.info("Bot is polling...")
@@ -70,8 +71,8 @@ def main():
             logger.warning(f"Network error: {e}. Retrying in 5 sec...")
             time.sleep(5)
         except telegram.error.Conflict as e:
-            logger.error(f"Conflict error: {e}. Another instance is running. Retrying in 5 sec...")
-            time.sleep(5)
+            logger.error(f"Conflict error: {e}. Retrying in 10 sec...")
+            time.sleep(10)
         except Exception as e:
             logger.error(f"Bot crashed: {e}")
             raise
