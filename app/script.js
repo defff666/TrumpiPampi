@@ -12,7 +12,7 @@ class GameState {
         const saved = localStorage.getItem(`trumpiPampi_${this.chatId}`);
         const defaults = { balance: 0, energy: 1000, max_energy: 1000, level: 1, multitap: 1, last_update: Date.now() / 1000 };
         this.state = saved ? JSON.parse(saved) : defaults;
-        this.updateEnergy(); // Восстановление энергии при загрузке
+        this.updateEnergy();
         console.log('Loaded state:', this.state);
     }
 
@@ -21,9 +21,9 @@ class GameState {
     }
 
     updateEnergy() {
-        const now = Date.now() / 1000; // Время в секундах
-        const elapsed = now - this.state.last_update;
-        const recoveryRate = this.state.level; // 1 энергия/сек на 1 уровне
+        const now = Date.now() / 1000;
+        const elapsed = Math.max(0, now - this.state.last_update);
+        const recoveryRate = this.state.level;
         const recoveredEnergy = Math.floor(elapsed * recoveryRate);
         this.state.energy = Math.min(this.state.max_energy, this.state.energy + recoveredEnergy);
         this.state.last_update = now;
@@ -43,10 +43,8 @@ class GameState {
             }
             this.state.last_update = Date.now() / 1000;
             this.saveState();
-            console.log('Tap processed:', this.state);
             return true;
         }
-        console.log('Not enough energy');
         return false;
     }
 
@@ -64,8 +62,20 @@ class UIController {
             balance: document.getElementById('balance'),
             energy: document.getElementById('energy'),
             level: document.getElementById('level'),
-            multitap: document.getElementById('multitap')
+            multitap: document.getElementById('multitap'),
+            main: document.getElementById('main-screen'),
+            settings: document.getElementById('settings-screen'),
+            tasks: document.getElementById('tasks-screen'),
+            referrals: document.getElementById('referrals-screen')
         };
+        this.currentScreen = 'main';
+    }
+
+    showScreen(screen) {
+        Object.values(this.elements).forEach(el => el.style.display = 'none');
+        this.elements[screen].style.display = 'block';
+        this.currentScreen = screen;
+        this.update();
     }
 
     update() {
@@ -74,6 +84,47 @@ class UIController {
         this.elements.energy.textContent = `⚡ ${state.energy}/${state.max_energy}`;
         this.elements.level.textContent = `Level: ${state.level}`;
         this.elements.multitap.textContent = `Multitap: x${state.multitap}`;
+        if (this.currentScreen === 'settings') this.updateSettings();
+        if (this.currentScreen === 'tasks') this.updateTasks();
+        if (this.currentScreen === 'referrals') this.updateReferrals();
+    }
+
+    updateSettings() {
+        const state = this.gameState.getState();
+        this.elements.settings.innerHTML = `
+            <h2>Settings</h2>
+            <p>Balance: ${state.balance} TRUMP</p>
+            <p>Energy: ${state.energy}/${state.max_energy}</p>
+            <p>Level: ${state.level}</p>
+            <p>Multitap: x${state.multitap}</p>
+            <button onclick="ui.showScreen('main')">Back</button>
+        `;
+    }
+
+    updateTasks() {
+        fetch(`/api/tasks?chat_id=${chatId}`)
+            .then(response => response.json())
+            .then(data => {
+                this.elements.tasks.innerHTML = `
+                    <h2>Daily Tasks</h2>
+                    <ul>${data.tasks.map(task => `
+                        <li>${task.description} - ${task.reward} TRUMP
+                            ${task.completed ? '(Completed)' : `<button onclick="completeTask(${task.id})">Complete</button>`}
+                        </li>`).join('')}
+                    </ul>
+                    <button onclick="ui.showScreen('main')">Back</button>
+                `;
+            });
+    }
+
+    updateReferrals() {
+        const referralLink = `https://t.me/TrumpiPampiBot?start=ref_${chatId}`;
+        this.elements.referrals.innerHTML = `
+            <h2>Referrals</h2>
+            <p>Invite friends and earn 100 TRUMP per referral!</p>
+            <p>Your link: <input type="text" value="${referralLink}" readonly></p>
+            <button onclick="ui.showScreen('main')">Back</button>
+        `;
     }
 }
 
@@ -99,7 +150,7 @@ async function loadInitialStats() {
         console.log('Initial stats synced from server:', serverStats);
     } catch (error) {
         console.error('Error loading initial stats:', error);
-        ui.update(); // Используем локальные данные, если сервер недоступен
+        ui.update();
     }
 }
 
@@ -119,26 +170,44 @@ async function syncWithServer() {
     }
 }
 
+// Завершение таска
+async function completeTask(taskId) {
+    try {
+        const response = await fetch('/api/complete_task', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, task_id: taskId })
+        });
+        if (!response.ok) throw new Error(`Task completion failed: ${response.status}`);
+        const data = await response.json();
+        game.state.balance += data.reward;
+        game.saveState();
+        ui.updateTasks();
+        console.log(`Task ${taskId} completed, reward: ${data.reward}`);
+    } catch (error) {
+        console.error('Task completion error:', error);
+    }
+}
+
 // Обработчики событий
 document.getElementById('tap-btn').addEventListener('click', () => {
     if (game.tap()) ui.update();
 });
+document.getElementById('settings-btn').addEventListener('click', () => ui.showScreen('settings'));
+document.getElementById('tasks-btn').addEventListener('click', () => ui.showScreen('tasks'));
+document.getElementById('referrals-btn').addEventListener('click', () => ui.showScreen('referrals'));
 
-// Синхронизация при закрытии или сворачивании
 window.addEventListener('unload', syncWithServer);
 Telegram.WebApp.onEvent('viewportChanged', (event) => {
-    if (!event.isStateStable) {
-        // При сворачивании синхронизируем
-        syncWithServer();
-    }
+    if (!event.isStateStable) syncWithServer();
 });
+Telegram.WebApp.ready();
 
 // Инициализация
-Telegram.WebApp.ready();
 loadInitialStats();
 ui.update();
 setInterval(() => {
     game.updateEnergy();
     ui.update();
-}, 1000); // Обновление энергии каждую секунду
-setInterval(syncWithServer, 300000); // Синхронизация каждые 5 минут
+}, 1000);
+setInterval(syncWithServer, 300000);
