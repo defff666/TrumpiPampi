@@ -4,7 +4,7 @@ import threading
 import time
 from flask import Flask, request, send_from_directory
 from telegram import Bot, Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-from telegram.ext import Application, CommandHandler, ContextTypes, Updater, WebhookUpdate
+from telegram.ext import Application, CommandHandler, ContextTypes
 from database import Database
 
 # Логирование
@@ -56,9 +56,14 @@ def get_stats():
 
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
-    update = Update.de_json(request.get_json(), bot)
-    app.process_update(update)
-    return '', 200
+    try:
+        update = Update.de_json(request.get_json(), bot)
+        if update:
+            app.process_update(update)
+        return '', 200
+    except Exception as e:
+        logger.error(f"Webhook processing failed: {e}")
+        return '', 500
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
