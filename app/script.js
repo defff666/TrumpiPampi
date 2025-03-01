@@ -10,7 +10,7 @@ class GameState {
 
     loadState() {
         const saved = localStorage.getItem(`trumpiPampi_${this.chatId}`);
-        const defaults = { balance: 0, energy: 1000, max_energy: 1000, level: 1, multitap: 1, last_update: Date.now() };
+        const defaults = { balance: 0, energy: 1000, max_energy: 1000, level: 1, multitap: 1, last_update: Date.now() / 1000 };
         this.state = saved ? JSON.parse(saved) : defaults;
         this.updateEnergy(); // Восстановление энергии при загрузке
         console.log('Loaded state:', this.state);
@@ -21,10 +21,11 @@ class GameState {
     }
 
     updateEnergy() {
-        const now = Date.now();
-        const elapsed = (now - this.state.last_update) / 1000; // Время в секундах
+        const now = Date.now() / 1000; // Время в секундах
+        const elapsed = now - this.state.last_update;
         const recoveryRate = this.state.level; // 1 энергия/сек на 1 уровне
-        this.state.energy = Math.min(this.state.max_energy, this.state.energy + Math.floor(elapsed * recoveryRate));
+        const recoveredEnergy = Math.floor(elapsed * recoveryRate);
+        this.state.energy = Math.min(this.state.max_energy, this.state.energy + recoveredEnergy);
         this.state.last_update = now;
         this.saveState();
     }
@@ -40,7 +41,7 @@ class GameState {
                 this.state.multitap = this.state.level;
                 console.log(`Leveled up to ${this.state.level}`);
             }
-            this.state.last_update = Date.now();
+            this.state.last_update = Date.now() / 1000;
             this.saveState();
             console.log('Tap processed:', this.state);
             return true;
@@ -87,13 +88,12 @@ async function loadInitialStats() {
         if (!response.ok) throw new Error(`Stats fetch failed: ${response.status}`);
         const serverStats = await response.json();
         const localStats = game.getState();
-        // Берём максимум из локального и серверного состояния
         game.state.balance = Math.max(localStats.balance, serverStats.balance);
         game.state.energy = Math.max(localStats.energy, serverStats.energy);
         game.state.max_energy = Math.max(localStats.max_energy, serverStats.max_energy);
         game.state.level = Math.max(localStats.level, serverStats.level);
         game.state.multitap = Math.max(localStats.multitap, serverStats.multitap);
-        game.state.last_update = Date.now();
+        game.state.last_update = Date.now() / 1000;
         game.saveState();
         ui.update();
         console.log('Initial stats synced from server:', serverStats);
@@ -124,10 +124,17 @@ document.getElementById('tap-btn').addEventListener('click', () => {
     if (game.tap()) ui.update();
 });
 
+// Синхронизация при закрытии или сворачивании
 window.addEventListener('unload', syncWithServer);
-window.Telegram.WebApp.ready();
+Telegram.WebApp.onEvent('viewportChanged', (event) => {
+    if (!event.isStateStable) {
+        // При сворачивании синхронизируем
+        syncWithServer();
+    }
+});
 
-// Инициализация и обновление
+// Инициализация
+Telegram.WebApp.ready();
 loadInitialStats();
 ui.update();
 setInterval(() => {
