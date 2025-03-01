@@ -1,7 +1,7 @@
 const chatId = new URLSearchParams(window.location.search).get('chat_id');
 if (!chatId) console.error('chat_id is missing');
 
-// Модель состояния с локальным кэшем
+// Модель состояния
 class GameState {
     constructor(chatId) {
         this.chatId = chatId;
@@ -12,6 +12,7 @@ class GameState {
         const saved = localStorage.getItem(`trumpiPampi_${this.chatId}`);
         const defaults = { balance: 0, energy: 1000, max_energy: 1000, level: 1, multitap: 1, last_update: Date.now() };
         this.state = saved ? JSON.parse(saved) : defaults;
+        this.updateEnergy(); // Восстановление энергии при загрузке
         console.log('Loaded state:', this.state);
     }
 
@@ -85,12 +86,20 @@ async function loadInitialStats() {
         const response = await fetch(`/api/stats?chat_id=${chatId}`);
         if (!response.ok) throw new Error(`Stats fetch failed: ${response.status}`);
         const serverStats = await response.json();
-        game.state = { ...game.state, ...serverStats, last_update: Date.now() };
+        const localStats = game.getState();
+        // Берём максимум из локального и серверного состояния
+        game.state.balance = Math.max(localStats.balance, serverStats.balance);
+        game.state.energy = Math.max(localStats.energy, serverStats.energy);
+        game.state.max_energy = Math.max(localStats.max_energy, serverStats.max_energy);
+        game.state.level = Math.max(localStats.level, serverStats.level);
+        game.state.multitap = Math.max(localStats.multitap, serverStats.multitap);
+        game.state.last_update = Date.now();
         game.saveState();
         ui.update();
         console.log('Initial stats synced from server:', serverStats);
     } catch (error) {
         console.error('Error loading initial stats:', error);
+        ui.update(); // Используем локальные данные, если сервер недоступен
     }
 }
 
