@@ -1,99 +1,128 @@
 const chatId = new URLSearchParams(window.location.search).get('chat_id');
+if (!chatId) console.error('chat_id is missing');
 
-// Загружаем или инициализируем локальные данные
-let stats = JSON.parse(localStorage.getItem(`trumpiPampi_${chatId}`)) || {
-    balance: 0,
-    energy: 1000,
-    max_energy: 1000,
-    level: 1,
-    multitap: 1,
-    last_update: Date.now()
-};
+// Модель состояния с локальным кэшем
+class GameState {
+    constructor(chatId) {
+        this.chatId = chatId;
+        this.loadState();
+    }
 
-// Обновляем UI
-function updateUI() {
-    document.getElementById('balance').innerText = `💰 ${stats.balance} TRUMP`;
-    document.getElementById('energy').innerText = `⚡ ${stats.energy}/${stats.max_energy}`;
-    document.getElementById('level').innerText = `Level: ${stats.level}`;
-    document.getElementById('multitap').innerText = `Multitap: x${stats.multitap}`;
-}
+    loadState() {
+        const saved = localStorage.getItem(`trumpiPampi_${this.chatId}`);
+        const defaults = { balance: 0, energy: 1000, max_energy: 1000, level: 1, multitap: 1, last_update: Date.now() };
+        this.state = saved ? JSON.parse(saved) : defaults;
+        console.log('Loaded state:', this.state);
+    }
 
-// Восстановление энергии
-function updateEnergy() {
-    const now = Date.now();
-    const elapsed = (now - stats.last_update) / 1000; // Время в секундах
-    const recoveryRate = stats.level; // 1 энергия/сек на 1 уровне
-    stats.energy = Math.min(stats.max_energy, stats.energy + Math.floor(elapsed * recoveryRate));
-    stats.last_update = now;
-    localStorage.setItem(`trumpiPampi_${chatId}`, JSON.stringify(stats));
-    updateUI();
-}
+    saveState() {
+        localStorage.setItem(`trumpiPampi_${this.chatId}`, JSON.stringify(this.state));
+    }
 
-async function tap() {
-    if (stats.energy >= stats.multitap) {
-        stats.energy -= stats.multitap;
-        stats.balance += stats.multitap;
-        // Проверка уровня
-        const newLevel = 1 + Math.floor(stats.balance / 1000);
-        if (newLevel > stats.level) {
-            stats.level = newLevel;
-            stats.max_energy = 1000 * stats.level;
-            stats.multitap = stats.level;
-            console.log(`Leveled up to ${stats.level}, max_energy=${stats.max_energy}, multitap=${stats.multitap}`);
+    updateEnergy() {
+        const now = Date.now();
+        const elapsed = (now - this.state.last_update) / 1000; // Время в секундах
+        const recoveryRate = this.state.level; // 1 энергия/сек на 1 уровне
+        this.state.energy = Math.min(this.state.max_energy, this.state.energy + Math.floor(elapsed * recoveryRate));
+        this.state.last_update = now;
+        this.saveState();
+    }
+
+    tap() {
+        if (this.state.energy >= this.state.multitap) {
+            this.state.energy -= this.state.multitap;
+            this.state.balance += this.state.multitap;
+            const newLevel = 1 + Math.floor(this.state.balance / 1000);
+            if (newLevel > this.state.level) {
+                this.state.level = newLevel;
+                this.state.max_energy = 1000 * this.state.level;
+                this.state.multitap = this.state.level;
+                console.log(`Leveled up to ${this.state.level}`);
+            }
+            this.state.last_update = Date.now();
+            this.saveState();
+            console.log('Tap processed:', this.state);
+            return true;
         }
-        stats.last_update = Date.now();
-        localStorage.setItem(`trumpiPampi_${chatId}`, JSON.stringify(stats));
-        updateUI();
-        console.log('Tap processed locally:', stats);
-    } else {
         console.log('Not enough energy');
+        return false;
+    }
+
+    getState() {
+        this.updateEnergy();
+        return { ...this.state };
     }
 }
 
-async function syncWithServer() {
-    try {
-        console.log('Syncing with server for chat_id:', chatId);
-        const response = await fetch('/api/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, ...stats })
-        });
-        if (!response.ok) throw new Error(`Sync failed: ${response.status}`);
-        console.log('Sync successful');
-    } catch (error) {
-        console.error('Error syncing with server:', error);
+// Управление UI
+class UIController {
+    constructor(gameState) {
+        this.gameState = gameState;
+        this.elements = {
+            balance: document.getElementById('balance'),
+            energy: document.getElementById('energy'),
+            level: document.getElementById('level'),
+            multitap: document.getElementById('multitap')
+        };
+    }
+
+    update() {
+        const state = this.gameState.getState();
+        this.elements.balance.textContent = `💰 ${state.balance} TRUMP`;
+        this.elements.energy.textContent = `⚡ ${state.energy}/${state.max_energy}`;
+        this.elements.level.textContent = `Level: ${state.level}`;
+        this.elements.multitap.textContent = `Multitap: x${state.multitap}`;
     }
 }
+
+// Инициализация
+const game = new GameState(chatId);
+const ui = new UIController(game);
 
 // Загрузка начальных данных с сервера
 async function loadInitialStats() {
     try {
-        console.log('Loading initial stats for chat_id:', chatId);
         const response = await fetch(`/api/stats?chat_id=${chatId}`);
-        if (!response.ok) throw new Error(`Stats request failed: ${response.status}`);
+        if (!response.ok) throw new Error(`Stats fetch failed: ${response.status}`);
         const serverStats = await response.json();
-        stats = { ...stats, ...serverStats, last_update: Date.now() };
-        localStorage.setItem(`trumpiPampi_${chatId}`, JSON.stringify(stats));
-        updateUI();
+        game.state = { ...game.state, ...serverStats, last_update: Date.now() };
+        game.saveState();
+        ui.update();
+        console.log('Initial stats synced from server:', serverStats);
     } catch (error) {
         console.error('Error loading initial stats:', error);
     }
 }
 
-window.Telegram.WebApp.ready();
-console.log('Mini App initialized');
+// Синхронизация с сервером
+async function syncWithServer() {
+    try {
+        const state = game.getState();
+        const response = await fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, ...state })
+        });
+        if (!response.ok) throw new Error(`Sync failed: ${response.status}`);
+        console.log('Sync successful');
+    } catch (error) {
+        console.error('Sync error:', error);
+    }
+}
 
-// Добавляем элементы для уровня и мультитапа
-document.querySelector('.container').insertAdjacentHTML('beforeend', `
-    <div id="level">Level: ${stats.level}</div>
-    <div id="multitap">Multitap: x${stats.multitap}</div>
-`);
+// Обработчики событий
+document.getElementById('tap-btn').addEventListener('click', () => {
+    if (game.tap()) ui.update();
+});
 
-// Синхронизация при закрытии
 window.addEventListener('unload', syncWithServer);
+window.Telegram.WebApp.ready();
 
-// Инициализация и регулярное обновление
+// Инициализация и обновление
 loadInitialStats();
-updateUI();
-setInterval(updateEnergy, 1000); // Восстановление энергии каждую секунду
+ui.update();
+setInterval(() => {
+    game.updateEnergy();
+    ui.update();
+}, 1000); // Обновление энергии каждую секунду
 setInterval(syncWithServer, 300000); // Синхронизация каждые 5 минут
