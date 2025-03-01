@@ -8,7 +8,6 @@ from telegram import Bot, Update, InlineKeyboardMarkup, InlineKeyboardButton, We
 from telegram.ext import Application, CommandHandler, ContextTypes
 from database import Database
 
-# Логирование
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ def sync():
         chat_id = data.get('chat_id')
         if not chat_id:
             return {"error": "chat_id is required"}, 400
-        db.sync_user(chat_id, data['balance'], data['energy'], data['max_energy'], data['level'], data['multitap'])
+        db.sync_user(chat_id, data['balance'], data['energy'], data['max_energy'], data['level'], data['multitap'], data['last_update'])
         logger.info(f"Sync successful for chat_id: {chat_id}")
         return {"status": "synced"}, 200
     except Exception as e:
@@ -54,6 +53,34 @@ def get_stats():
         logger.error(f"Stats fetch failed: {e}")
         return {"error": str(e)}, 500
 
+@flask_app.route('/api/tasks', methods=['GET'])
+def get_tasks():
+    try:
+        chat_id = request.args.get('chat_id')
+        if not chat_id:
+            return {"error": "chat_id is required"}, 400
+        tasks = db.get_tasks(int(chat_id))
+        logger.info(f"Tasks returned for chat_id: {chat_id}: {tasks}")
+        return {"tasks": tasks}, 200
+    except Exception as e:
+        logger.error(f"Tasks fetch failed: {e}")
+        return {"error": str(e)}, 500
+
+@flask_app.route('/api/complete_task', methods=['POST'])
+def complete_task():
+    try:
+        data = request.get_json()
+        chat_id = data.get('chat_id')
+        task_id = data.get('task_id')
+        if not chat_id or not task_id:
+            return {"error": "chat_id and task_id are required"}, 400
+        reward = db.complete_task(int(chat_id), int(task_id))
+        logger.info(f"Task {task_id} completed for chat_id: {chat_id}, reward: {reward}")
+        return {"reward": reward}, 200
+    except Exception as e:
+        logger.error(f"Task completion failed: {e}")
+        return {"error": str(e)}, 500
+
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     try:
@@ -70,8 +97,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ref_id = context.args[0].split('_')[1] if context.args and '_' in context.args[0] else None
     db.register_user(chat_id, ref_id)
     logger.info(f"User {chat_id} started bot with ref_id: {ref_id}")
+    referral_link = f"https://t.me/TrumpiPampiBot?start=ref_{chat_id}"
     await update.message.reply_text(
-        "Welcome to Trumpi Pumpi! Tap Trump to earn TRUMP coins! 💰",
+        f"Welcome to Trumpi Pumpi! Tap Trump to earn TRUMP coins! 💰\nYour referral link: {referral_link}",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Start Pumping!", web_app=WebAppInfo(url=f"{APP_URL}?chat_id={chat_id}"))]
         ])
@@ -93,13 +121,9 @@ def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     
-    # Асинхронно устанавливаем вебхук
     asyncio.run(setup_webhook())
-
-    # Запускаем Flask в отдельном потоке
     threading.Thread(target=run_flask, daemon=True).start()
 
-    # Держим основной поток живым
     while True:
         time.sleep(60)
 
