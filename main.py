@@ -1,7 +1,7 @@
 import logging
 import os
 import threading
-import time
+import asyncio
 from flask import Flask, request, send_from_directory
 from telegram import Bot, Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -17,7 +17,6 @@ WEBHOOK_URL = 'https://trumpipampi.onrender.com/webhook'
 
 flask_app = Flask(__name__, static_folder='app')
 db = Database()
-bot = Bot(TOKEN)
 
 @flask_app.route('/app')
 def serve_app():
@@ -81,15 +80,20 @@ def run_flask():
     logger.info("Starting Flask server on 0.0.0.0:5000...")
     flask_app.run(host='0.0.0.0', port=5000)
 
+async def setup_webhook():
+    global bot
+    bot = Bot(TOKEN)
+    await bot.set_webhook(WEBHOOK_URL)
+    logger.info(f"Webhook set to {WEBHOOK_URL}")
+
 def main():
     logger.info("Initializing TrumpiPumpi bot...")
     global app
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     
-    # Устанавливаем вебхук
-    app.bot.set_webhook(WEBHOOK_URL)
-    logger.info(f"Webhook set to {WEBHOOK_URL}")
+    # Асинхронно устанавливаем вебхук
+    asyncio.run(setup_webhook())
 
     # Запускаем Flask в отдельном потоке
     threading.Thread(target=run_flask, daemon=True).start()
